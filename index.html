@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser Camera App</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #121212;
+            color: #ffffff;
+            font-family: sans-serif;
+        }
+        #camera-container {
+            position: relative;
+            width: 90%;
+            max-width: 600px;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+            background: #000;
+        }
+        video {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        #overlay {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 12px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+        }
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+        .label {
+            font-size: 0.7rem;
+            color: #aaaaaa;
+            margin-bottom: 2px;
+        }
+        .value {
+            font-size: 0.9rem;
+            font-weight: bold;
+        }
+        #controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 5px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #555555;
+            cursor: not-allowed;
+        }
+        #capture-btn {
+            background-color: #28a745;
+        }
+        #capture-btn:hover {
+            background-color: #218838;
+        }
+        #flip-btn {
+            background-color: #ffc107;
+            color: #000;
+        }
+        #flip-btn:hover {
+            background-color: #e0a800;
+        }
+        #canvas {
+            display: none;
+        }
+        #preview-container {
+            margin-top: 20px;
+            text-align: center;
+        }
+        #preview-img {
+            max-width: 100%;
+            max-height: 250px;
+            border-radius: 8px;
+            border: 2px solid #fff;
+            display: none;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="camera-container">
+        <video id="video" autoplay playsinline></video>
+        <div id="overlay">
+            <div class="info-item">
+                <span class="label">LOCATION</span>
+                <span id="location-value" class="value">Detecting...</span>
+            </div>
+            <div class="info-item">
+                <span class="label">DATE</span>
+                <span id="date-value" class="value">--/--/----</span>
+            </div>
+            <div class="info-item">
+                <span class="label">TIME</span>
+                <span id="time-value" class="value">--:--:--</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <button id="start-btn">Start Camera</button>
+        <button id="flip-btn" style="display: none;">Switch Camera</button>
+        <button id="capture-btn" style="display: none;">Capture Photo</button>
+    </div>
+
+    <div id="preview-container">
+        <canvas id="canvas"></canvas>
+        <img id="preview-img" alt="Captured Photo">
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const startBtn = document.getElementById('start-btn');
+        const flipBtn = document.getElementById('flip-btn');
+        const captureBtn = document.getElementById('capture-btn');
+        const locationValue = document.getElementById('location-value');
+        const dateValue = document.getElementById('date-value');
+        const timeValue = document.getElementById('time-value');
+        const canvas = document.getElementById('canvas');
+        const previewImg = document.getElementById('preview-img');
+
+        let stream = null;
+        let currentFacingMode = 'environment'; // Default back camera ('user' for front)
+
+        async function startCamera(facingMode) {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            try {
+                const constraints = {
+                    video: { facingMode: facingMode },
+                    audio: false
+                };
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+                
+                startBtn.style.display = 'none';
+                flipBtn.style.display = 'inline-block';
+                captureBtn.style.display = 'inline-block';
+
+                updateDateTime();
+                setInterval(updateDateTime, 1000);
+                getLocation();
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                alert('Camera access error or permission denied.');
+            }
+        }
+
+        startBtn.addEventListener('click', () => {
+            startCamera(currentFacingMode);
+        });
+
+        flipBtn.addEventListener('click', () => {
+            currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+            startCamera(currentFacingMode);
+        });
+
+        captureBtn.addEventListener('click', () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const dataUrl = canvas.toDataURL('image/png');
+            previewImg.src = dataUrl;
+            previewImg.style.display = 'block';
+        });
+
+        function updateDateTime() {
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            dateValue.textContent = `${day}/${month}/${year}`;
+
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            timeValue.textContent = `${hours}:${minutes}:${seconds}`;
+        }
+
+        async function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(async (position) => {
+                    const { latitude, longitude } = position.coords;
+                    try {
+                        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`);
+                        const data = await response.json();
+                        const city = data.address.city || data.address.town || data.address.village || 'Unknown City';
+                        const state = data.address.state || '';
+                        locationValue.textContent = `${city}, ${state}`;
+                    } catch (error) {
+                        locationValue.textContent = 'City unknown';
+                    }
+                }, () => {
+                    locationValue.textContent = 'Location denied';
+                });
+            } else {
+                locationValue.textContent = 'Not supported';
+            }
+        }
+    </script>
+
+</body>
+</html>
